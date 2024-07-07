@@ -1,2 +1,7 @@
-dataset/
+dataset
 .env
+*.json
+*hdf5
+metrics/
+trained-weights/
+__pycache__/
