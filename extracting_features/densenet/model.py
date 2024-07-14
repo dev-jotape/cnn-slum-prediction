@@ -10,7 +10,6 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
-from tensorflow.keras.regularizers import l2
 
 print('IMPORT DATA -----------------------------')
 
@@ -76,13 +75,13 @@ for i, layer in enumerate(base_model.layers):
 x = base_model.output
 # x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
-x = tf.keras.layers.Dense(1024, activation='relu', kernel_regularizer=l2(0.01))(x)
+x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
 
-# print(model.summary())
-# exit()
+print(model.summary())
+
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
 
