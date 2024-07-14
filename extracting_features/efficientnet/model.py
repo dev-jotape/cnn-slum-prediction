@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications.resnet50 import ResNet50
+from tensorflow.keras.applications import EfficientNetB7
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -16,7 +16,8 @@ print('IMPORT DATA -----------------------------')
 # Define your dataset
 dataset = 'GMAPS_RGB_2024'
 # dataset = 'GEE_SENT2_RGB_2020_05'
-data_dir = '../../../dataset/slums_sp_images/' + dataset + '/'
+# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
+data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
 
 input_shape = (224, 224, 3)
 
@@ -64,7 +65,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-base_model = ResNet50(include_top=False, input_shape=input_shape, weights=None)
+base_model = EfficientNetB7(include_top=False, input_shape=input_shape, weights=None)
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -85,14 +86,14 @@ optimizer = Adam(learning_rate=lr)
 
 METRICS = [
       "accuracy",
-      tf.keras.metrics.TruePositives(name='tp'),
-      tf.keras.metrics.FalsePositives(name='fp'),
-      tf.keras.metrics.TrueNegatives(name='tn'),
-      tf.keras.metrics.FalseNegatives(name='fn'), 
-      tf.keras.metrics.Precision(name='precision'),
-      tf.keras.metrics.Recall(name='recall'),
-      tf.keras.metrics.AUC(name='auc'),
-      tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
+    #   tf.keras.metrics.TruePositives(name='tp'),
+    #   tf.keras.metrics.FalsePositives(name='fp'),
+    #   tf.keras.metrics.TrueNegatives(name='tn'),
+    #   tf.keras.metrics.FalseNegatives(name='fn'), 
+    #   tf.keras.metrics.Precision(name='precision'),
+    #   tf.keras.metrics.Recall(name='recall'),
+    #   tf.keras.metrics.AUC(name='auc'),
+    #   tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
       tf.keras.metrics.F1Score(threshold=0.5),
 ]
 
@@ -144,15 +145,18 @@ with open("./results/model_{}.json".format(dataset), "w") as json_file:
 score = model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
+print('Test f1 score:', score[2]) 
 
 # ==================== FROM SCRATCH ====================
-# SENTINEL
-# Test loss: 0.34732505679130554
-# Test accuracy: 0.8617021441459656
+# SENTINEL RBG 16 epochs
 
-# GOOGLE MAPS
-# Test loss: 0.4443530738353729
-# Test accuracy: 0.8909574747085571
+# SENTINEL RGB+NIR 26 epochs
+
+
+# GOOGLE MAPS 25 epochs
+# Test loss: 0.4446544647216797
+# Test accuracy: 0.8368794322013855
+# Test f1 score: tf.Tensor([0.83053994 0.8445945 ], shape=(2,), dtype=float32)
 
 # ==================== IMAGENET PRETREINED ====================
 # SENTINEL

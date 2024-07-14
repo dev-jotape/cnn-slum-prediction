@@ -2,6 +2,7 @@ dataset
 .env
 *.json
 *hdf5
+*h5
 metrics/
 trained-weights/
 __pycache__/
