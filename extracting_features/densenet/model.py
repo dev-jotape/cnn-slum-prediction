@@ -10,6 +10,8 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 print('IMPORT DATA -----------------------------')
 
@@ -87,14 +89,14 @@ optimizer = Adam(learning_rate=lr)
 
 METRICS = [
       "accuracy",
-    #   tf.keras.metrics.TruePositives(name='tp'),
-    #   tf.keras.metrics.FalsePositives(name='fp'),
-    #   tf.keras.metrics.TrueNegatives(name='tn'),
-    #   tf.keras.metrics.FalseNegatives(name='fn'), 
-    #   tf.keras.metrics.Precision(name='precision'),
-    #   tf.keras.metrics.Recall(name='recall'),
-    #   tf.keras.metrics.AUC(name='auc'),
-    #   tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
+      tf.keras.metrics.TruePositives(name='tp'),
+      tf.keras.metrics.FalsePositives(name='fp'),
+      tf.keras.metrics.TrueNegatives(name='tn'),
+      tf.keras.metrics.FalseNegatives(name='fn'), 
+      tf.keras.metrics.Precision(name='precision'),
+      tf.keras.metrics.Recall(name='recall'),
+      tf.keras.metrics.AUC(name='auc'),
+      tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
       tf.keras.metrics.F1Score(threshold=0.5),
 ]
 
@@ -106,47 +108,65 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
-checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
-                             monitor='val_accuracy', 
-                             verbose=1, 
-                             save_best_only=True,
-                             save_weights_only=True,
-                             mode='max')
+# filepath="./results/{}.weights.h5".format(dataset)
+# checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
+#                              monitor='val_accuracy', 
+#                              verbose=1, 
+#                              save_best_only=True,
+#                              save_weights_only=True,
+#                              mode='max')
 
-lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
-early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-callbacks_list = [checkpoint, lr_reduce, early]
+# lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
+# early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
+# callbacks_list = [checkpoint, lr_reduce, early]
 
-print('TRAINING MODEL -----------------------------')
+# print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
 x_train = np.squeeze(x_train)
 x_val = np.squeeze(x_val)
 x_test = np.squeeze(x_test)
 
-history = model.fit(
-          x_train, y_train, 
-          batch_size=32, 
-          validation_data=(x_val, y_val),
-          epochs=100, 
-          verbose=1,
-          callbacks=callbacks_list)
+# history = model.fit(
+#           x_train, y_train, 
+#           batch_size=32, 
+#           validation_data=(x_val, y_val),
+#           epochs=100, 
+#           verbose=1,
+#           callbacks=callbacks_list)
 
 ### storing Model in JSON --------------------------------------------------
 
-model_json = model.to_json()
+# model_json = model.to_json()
 
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
-    json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
+# with open("./results/model_{}.json".format(dataset), "w") as json_file:
+#     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
+weights_path = "./results/{}.weights.h5".format(dataset)
+model.load_weights(weights_path)
+
 score = model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
-print('Test f1 score:', score[2]) 
+print('Test all scores:', score) 
+
+### Confusion Matrix -------------------------------------------------------
+
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+y_true = np.argmax(y_test, axis=1)
+
+cm = confusion_matrix(y_true, y_pred_classes)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap=plt.cm.Blues)
+
+# Save the confusion matrix as an image file
+plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.close()
+
 
 # ==================== FROM SCRATCH ====================
 # SENTINEL RBG 16 epochs
@@ -176,11 +196,18 @@ print('Test f1 score:', score[2])
 # Test f1 score: tf.Tensor([0.87778765 0.88105714], shape=(2,), dtype=float32)
 
 # GOOGLE MAPS Finetuning
-# Test loss: 0.2682138681411743
-# Test accuracy: 0.9317376017570496
-# Test f1 score: tf.Tensor([0.9330954  0.93145865], shape=(2,), dtype=float32)
-
-
-# img = np.array([load_tiff_image('../dataset/slums_sp_images/GEE_SENT2_RGB_2020_05/4450_1.tif')])
-# pred = model.predict(images)
-# print(pred)
+# Test loss: 0.18058724701404572
+# Test accuracy: 0.9335106611251831
+# Test all scores: [
+#   0.18058724701404572, 
+#   0.9335106611251831,
+#   1056.0,
+#   73.0,
+#   1055.0,
+#   72.0,
+#   0.9353410005569458,
+#   0.936170220375061,
+#   0.9811156988143921,
+#   0.9796940684318542,
+#   [0.9382715, 0.93321455],
+# ] 

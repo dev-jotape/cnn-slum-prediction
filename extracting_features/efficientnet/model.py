@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import EfficientNetB7
+from tensorflow.keras.applications import EfficientNetV2L
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -10,6 +10,8 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 print('IMPORT DATA -----------------------------')
 
@@ -65,7 +67,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-base_model = EfficientNetB7(include_top=False, input_shape=input_shape, weights=None)
+base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -79,21 +81,21 @@ x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
 
-# print(model.summary())
-# exit()
+print(model.summary())
+
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
 
 METRICS = [
       "accuracy",
-    #   tf.keras.metrics.TruePositives(name='tp'),
-    #   tf.keras.metrics.FalsePositives(name='fp'),
-    #   tf.keras.metrics.TrueNegatives(name='tn'),
-    #   tf.keras.metrics.FalseNegatives(name='fn'), 
-    #   tf.keras.metrics.Precision(name='precision'),
-    #   tf.keras.metrics.Recall(name='recall'),
-    #   tf.keras.metrics.AUC(name='auc'),
-    #   tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
+      tf.keras.metrics.TruePositives(name='tp'),
+      tf.keras.metrics.FalsePositives(name='fp'),
+      tf.keras.metrics.TrueNegatives(name='tn'),
+      tf.keras.metrics.FalseNegatives(name='fn'), 
+      tf.keras.metrics.Precision(name='precision'),
+      tf.keras.metrics.Recall(name='recall'),
+      tf.keras.metrics.AUC(name='auc'),
+      tf.keras.metrics.AUC(name='prc', curve='PR'), # precision-recall curve
       tf.keras.metrics.F1Score(threshold=0.5),
 ]
 
@@ -105,32 +107,31 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
-checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
-                             monitor='val_accuracy', 
-                             verbose=1, 
-                             save_best_only=True,
-                             save_weights_only=True,
-                             mode='max')
+# filepath="./results/{}.weights.h5".format(dataset)
+# checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
+#                              monitor='val_accuracy', 
+#                              verbose=1, 
+#                              save_best_only=True,
+#                              save_weights_only=True,
+#                              mode='max')
 
-lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
-early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-# checkpoint  = tf.keras.callbacks.ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
-callbacks_list = [checkpoint, lr_reduce, early]
+# lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
+# early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
+# callbacks_list = [checkpoint, lr_reduce, early]
 
-print('TRAINING MODEL -----------------------------')
+# print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
 x_train = np.squeeze(x_train)
 x_val = np.squeeze(x_val)
 x_test = np.squeeze(x_test)
 
-history = model.fit(x_train, y_train, 
-          validation_data=(x_val, y_val),
-          batch_size=32, 
-          epochs=100, 
-          verbose=1,
-          callbacks=callbacks_list)
+# history = model.fit(x_train, y_train, 
+#           validation_data=(x_val, y_val),
+#           batch_size=32, 
+#           epochs=100, 
+#           verbose=1,
+#           callbacks=callbacks_list)
 
 ### storing Model in JSON --------------------------------------------------
 
@@ -142,10 +143,27 @@ with open("./results/model_{}.json".format(dataset), "w") as json_file:
 
 ### evaluate model ---------------------------------------------------------
 
+weights_path = "./results/{}.weights.h5".format(dataset)
+model.load_weights(weights_path)
+
 score = model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
-print('Test f1 score:', score[2]) 
+print('Test all scores:', score) 
+
+### Confusion Matrix -------------------------------------------------------
+
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+y_true = np.argmax(y_test, axis=1)
+
+cm = confusion_matrix(y_true, y_pred_classes)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap=plt.cm.Blues)
+
+# Save the confusion matrix as an image file
+plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.close()
 
 # ==================== FROM SCRATCH ====================
 # SENTINEL RBG 16 epochs
