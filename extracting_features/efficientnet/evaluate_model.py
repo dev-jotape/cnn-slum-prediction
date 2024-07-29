@@ -18,15 +18,13 @@ from tensorflow.keras.applications.resnet50 import preprocess_input
 
 print('IMPORT DATA -----------------------------')
 
-# Define your dataset
+city = 'pa'
 dataset = 'GMAPS_RGB_2024'
 # dataset = 'GEE_SENT2_RGB_2020_05'
-# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
-data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
+data_dir = '../../dataset/slums_{}_images/{}/'.format(city, dataset)
 
 input_shape = (224, 224, 3)
 
-# Function to load TIFF images
 def load_tiff_image(file_path):
     with rasterio.open(file_path) as src:
         image = src.read([1, 2, 3])  # Read the first three bands
@@ -34,7 +32,6 @@ def load_tiff_image(file_path):
         upscaled_image = Image.fromarray(np.uint8(image*255)).resize([224,224], resample=Image.NEAREST)
         upscaled_image = np.asarray(upscaled_image)
     return upscaled_image
-
 def load_png_image(file_path):
     img = utils.load_img(file_path, target_size=input_shape)
     x = utils.img_to_array(img)
@@ -45,6 +42,7 @@ def load_png_image(file_path):
 # Load dataset
 images = []
 labels = []
+image_names = []
 
 for filename in os.listdir(data_dir):
     if filename.endswith('.png'):
@@ -56,17 +54,18 @@ for filename in os.listdir(data_dir):
         image = load_png_image(img_path)
         # image = load_tiff_image(img_path)
         images.append(image)
+        image_names.append(filename)
 
 labels = utils.to_categorical(labels, num_classes=2)
 images = np.array(images)
 labels = np.array(labels)
 print(len(labels))
-train_ratio = 0.7
-val_ratio = 0.15
-test_ratio = 0.15
+# train_ratio = 0.7
+# val_ratio = 0.15
+# test_ratio = 0.15
 
-x_train_val, x_test, y_train_val, y_test = train_test_split(images, labels, stratify=labels, test_size=test_ratio, random_state=123)
-x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stratify=y_train_val, test_size=val_ratio/(train_ratio+val_ratio), random_state=123)
+# x_train_val, x_test, y_train_val, y_test = train_test_split(images, labels, stratify=labels, test_size=test_ratio, random_state=123)
+# x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stratify=y_train_val, test_size=val_ratio/(train_ratio+val_ratio), random_state=123)
 
 print('CREATE MODEL -----------------------------')
 
@@ -121,68 +120,74 @@ model.compile(
     metrics=METRICS,
 )
 
-# Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
-checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
-                             monitor='val_accuracy', 
-                             verbose=1, 
-                             save_best_only=True,
-                             save_weights_only=True,
-                             mode='max')
-
-lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
-early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-callbacks_list = [checkpoint, lr_reduce, early]
-
 print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
-
-history = model.fit(x_train, y_train, 
-          validation_data=(x_val, y_val),
-          batch_size=64, 
-          epochs=100, 
-          verbose=1,
-          callbacks=callbacks_list)
-
-## storing Model in JSON --------------------------------------------------
-
-model_json = model.to_json()
-
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
-    json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
-
+x_all = np.squeeze(images)
 
 ### evaluate model ---------------------------------------------------------
 
 weights_path = "./results/{}.weights.h5".format(dataset)
 model.load_weights(weights_path)
 
-score = model.evaluate(x_test, y_test, verbose=1)
+score = model.evaluate(x_all, labels, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
 print('Test all scores:', score) 
 
 ### Confusion Matrix -------------------------------------------------------
 
-y_pred = model.predict(x_test)
+y_pred = model.predict(x_all)
 y_pred_classes = np.argmax(y_pred, axis=1)
-y_true = np.argmax(y_test, axis=1)
+y_true = np.argmax(labels, axis=1)
+
+# Save incorrect predictions
+incorrect_predictions = []
+for i in range(len(y_true)):
+    if y_true[i] != y_pred_classes[i]:
+        incorrect_predictions.append(image_names[i])
+
+with open("./results/incorrect_predictions_{}_{}.txt".format(city, dataset), "w") as f:
+    for item in incorrect_predictions:
+        f.write("%s\n" % item)
 
 cm = confusion_matrix(y_true, y_pred_classes)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm)
 disp.plot(cmap=plt.cm.Blues)
 
-# Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.savefig("./results/confusion_matrix_evaluate_{}_{}.png".format(city, dataset))
 plt.close()
 
 
-# ==================== IMAGENET PRETREINED ====================
-# GOOGLE MAPS
-# Test loss: 
-# Test accuracy:
+# ==================== IMAGENET PRETREINED - GOOGLE MAPS ====================
+# RJ
+# Test loss: 0.5341697335243225
+# Test accuracy: 0.8939999938011169
+# Test all scores: [0.5341697335243225, 0.8939999938011169, 891.0, 105.0, 895.0, 109.0, 0.8945783376693726, 0.890999972820282, 0.9345020055770874, 0.9205309152603149, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.89374375, 0.8918098 ], dtype=float32)>]
 
+# BH
+# Test loss: 0.3148861527442932
+# Test accuracy: 0.9350000023841858
+# Test all scores: [0.3148861527442932, 0.9350000023841858, 936.0, 65.0, 935.0, 64.0, 0.9350649118423462, 0.9359999895095825, 0.9625355005264282, 0.9528402090072632, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.934     , 0.93706286], dtype=float32)>]
+
+# Brasilia
+# Test loss: 1.141800045967102
+# Test accuracy: 0.7720000147819519
+# Test all scores: [1.141800045967102, 0.7720000147819519, 774.0, 227.0, 773.0, 226.0, 0.773226797580719, 0.7739999890327454, 0.8365876078605652, 0.8098095059394836, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8099999, 0.719101 ], dtype=float32)>]
+
+# Salvador
+# Test loss: 1.0858074426651
+# Test accuracy: 0.7720000147819519
+# Test all scores: [1.0858074426651, 0.7720000147819519, 770.0, 228.0, 772.0, 230.0, 0.7715430855751038, 0.7699999809265137, 0.8241145610809326, 0.7986006736755371, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7924865, 0.7431817], dtype=float32)>]
+
+# PA
+# Test loss: 1.7684743404388428
+# Test accuracy: 0.7279999852180481
+# Test all scores: [1.7684743404388428, 0.7279999852180481, 727.0, 273.0, 727.0, 273.0, 0.7269999980926514, 0.7269999980926514, 0.7529335618019104, 0.7164150476455688, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.76073617, 0.6821886 ], dtype=float32)>]
+
+# ==================== IMAGENET PRETREINED - SENTINEL-2 ====================
+
+# RJ 
+# Test loss: 1.9488403797149658
+# Test accuracy: 0.7080000042915344
+# Test all scores: [1.9488403797149658, 0.7080000042915344, 710.0, 297.0, 703.0, 290.0, 0.7050645351409912, 0.7099999785423279, 0.753227949142456, 0.719009518623352, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.73889863, 0.66742337], dtype=float32)>]

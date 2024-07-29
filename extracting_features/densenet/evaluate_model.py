@@ -1,10 +1,8 @@
 import tensorflow as tf
-from tensorflow.keras.applications import EfficientNetV2L
+from tensorflow.keras.applications import DenseNet201
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
-from sklearn.model_selection import train_test_split
-import json as simplejson
 from tensorflow.keras.applications.imagenet_utils import preprocess_input
 import rasterio
 import numpy as np
@@ -12,21 +10,18 @@ import os
 from PIL import Image 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
 
 print('IMPORT DATA -----------------------------')
 
-# Define your dataset
+city = 'pa'
 dataset = 'GMAPS_RGB_2024'
 # dataset = 'GEE_SENT2_RGB_2020_05'
-# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
-data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
+data_dir = '../../dataset/slums_{}_images/{}/'.format(city, dataset)
 
 input_shape = (224, 224, 3)
 
-# Function to load TIFF images
 def load_tiff_image(file_path):
     with rasterio.open(file_path) as src:
         image = src.read([1, 2, 3])  # Read the first three bands
@@ -34,7 +29,6 @@ def load_tiff_image(file_path):
         upscaled_image = Image.fromarray(np.uint8(image*255)).resize([224,224], resample=Image.NEAREST)
         upscaled_image = np.asarray(upscaled_image)
     return upscaled_image
-
 def load_png_image(file_path):
     img = utils.load_img(file_path, target_size=input_shape)
     x = utils.img_to_array(img)
@@ -45,6 +39,7 @@ def load_png_image(file_path):
 # Load dataset
 images = []
 labels = []
+image_names = []
 
 for filename in os.listdir(data_dir):
     if filename.endswith('.png'):
@@ -56,32 +51,16 @@ for filename in os.listdir(data_dir):
         image = load_png_image(img_path)
         # image = load_tiff_image(img_path)
         images.append(image)
+        image_names.append(filename)
 
 labels = utils.to_categorical(labels, num_classes=2)
 images = np.array(images)
 labels = np.array(labels)
 print(len(labels))
-train_ratio = 0.7
-val_ratio = 0.15
-test_ratio = 0.15
-
-x_train_val, x_test, y_train_val, y_test = train_test_split(images, labels, stratify=labels, test_size=test_ratio, random_state=123)
-x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stratify=y_train_val, test_size=val_ratio/(train_ratio+val_ratio), random_state=123)
 
 print('CREATE MODEL -----------------------------')
 
-def se_block(input_tensor, ratio=16):
-    channel_axis = -1  # TensorFlow channels_last format
-    filters = input_tensor.shape[channel_axis]
-
-    se = GlobalAveragePooling2D()(input_tensor)
-    se = Reshape((1, 1, filters))(se)
-    se = Dense(filters // ratio, activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
-    se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
-    x = multiply([input_tensor, se])
-    return x
-
-base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = DenseNet201(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -89,7 +68,6 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
-x = se_block(x)  # Adding SE block after the base model output
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
@@ -121,68 +99,48 @@ model.compile(
     metrics=METRICS,
 )
 
-# Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
-checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
-                             monitor='val_accuracy', 
-                             verbose=1, 
-                             save_best_only=True,
-                             save_weights_only=True,
-                             mode='max')
-
-lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
-early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-callbacks_list = [checkpoint, lr_reduce, early]
-
 print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
-
-history = model.fit(x_train, y_train, 
-          validation_data=(x_val, y_val),
-          batch_size=64, 
-          epochs=100, 
-          verbose=1,
-          callbacks=callbacks_list)
-
-## storing Model in JSON --------------------------------------------------
-
-model_json = model.to_json()
-
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
-    json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
-
+x_all = np.squeeze(images)
 
 ### evaluate model ---------------------------------------------------------
 
 weights_path = "./results/{}.weights.h5".format(dataset)
 model.load_weights(weights_path)
 
-score = model.evaluate(x_test, y_test, verbose=1)
+score = model.evaluate(x_all, labels, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
 print('Test all scores:', score) 
 
 ### Confusion Matrix -------------------------------------------------------
 
-y_pred = model.predict(x_test)
+y_pred = model.predict(x_all)
 y_pred_classes = np.argmax(y_pred, axis=1)
-y_true = np.argmax(y_test, axis=1)
+y_true = np.argmax(labels, axis=1)
+
+# Save incorrect predictions
+incorrect_predictions = []
+for i in range(len(y_true)):
+    if y_true[i] != y_pred_classes[i]:
+        incorrect_predictions.append(image_names[i])
+
+with open("./results/incorrect_predictions_{}_{}.txt".format(city, dataset), "w") as f:
+    for item in incorrect_predictions:
+        f.write("%s\n" % item)
 
 cm = confusion_matrix(y_true, y_pred_classes)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm)
 disp.plot(cmap=plt.cm.Blues)
 
-# Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.savefig("./results/confusion_matrix_evaluate_{}_{}.png".format(city, dataset))
 plt.close()
 
 
-# ==================== IMAGENET PRETREINED ====================
-# GOOGLE MAPS
-# Test loss: 
-# Test accuracy:
+# ==================== IMAGENET PRETREINED - GOOGLE MAPS ====================
+# RJ
 
+# ==================== IMAGENET PRETREINED - SENTINEL-2 ====================
+
+# RJ 

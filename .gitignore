@@ -6,3 +6,7 @@ dataset
 metrics/
 trained-weights/
 __pycache__/
+*.txt
+*.png
+*.tif
+*.npy

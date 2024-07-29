@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import EfficientNetV2L
+from tensorflow.keras.applications import VGG16
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -12,15 +12,12 @@ import os
 from PIL import Image 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
-from tensorflow.keras.applications.resnet50 import preprocess_input
-
 
 print('IMPORT DATA -----------------------------')
 
 # Define your dataset
-dataset = 'GMAPS_RGB_2024'
-# dataset = 'GEE_SENT2_RGB_2020_05'
+# dataset = 'GMAPS_RGB_2024'
+dataset = 'GEE_SENT2_RGB_2020_05'
 # dataset = 'GEE_SENT2_RGB_NIR_2020_05'
 data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
 
@@ -47,20 +44,20 @@ images = []
 labels = []
 
 for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+    if filename.endswith('.tif'):
+        name = filename.split('.tif')[0]
         img_class = name.split('_')[1]
         labels.append(int(img_class))
         
         img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        # image = load_png_image(img_path)
+        image = load_tiff_image(img_path)
         images.append(image)
 
 labels = utils.to_categorical(labels, num_classes=2)
 images = np.array(images)
 labels = np.array(labels)
-print(len(labels))
+print(labels)
 train_ratio = 0.7
 val_ratio = 0.15
 test_ratio = 0.15
@@ -70,18 +67,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-def se_block(input_tensor, ratio=16):
-    channel_axis = -1  # TensorFlow channels_last format
-    filters = input_tensor.shape[channel_axis]
-
-    se = GlobalAveragePooling2D()(input_tensor)
-    se = Reshape((1, 1, filters))(se)
-    se = Dense(filters // ratio, activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
-    se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
-    x = multiply([input_tensor, se])
-    return x
-
-base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = VGG16(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -89,7 +75,7 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
-x = se_block(x)  # Adding SE block after the base model output
+# x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
@@ -134,16 +120,17 @@ lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', facto
 early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
 callbacks_list = [checkpoint, lr_reduce, early]
 
-print('TRAINING MODEL -----------------------------')
+# print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
+# x_train = np.squeeze(x_train)
+# x_val = np.squeeze(x_val)
+# x_test = np.squeeze(x_test)
 
-history = model.fit(x_train, y_train, 
+history = model.fit(
+          x_train, y_train, 
+          batch_size=32, 
           validation_data=(x_val, y_val),
-          batch_size=64, 
           epochs=100, 
           verbose=1,
           callbacks=callbacks_list)
@@ -179,10 +166,3 @@ disp.plot(cmap=plt.cm.Blues)
 # Save the confusion matrix as an image file
 plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
 plt.close()
-
-
-# ==================== IMAGENET PRETREINED ====================
-# GOOGLE MAPS
-# Test loss: 
-# Test accuracy:
-

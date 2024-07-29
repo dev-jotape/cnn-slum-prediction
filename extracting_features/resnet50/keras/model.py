@@ -10,12 +10,15 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 print('IMPORT DATA -----------------------------')
 
 # Define your dataset
-dataset = 'GMAPS_RGB_2024'
-# dataset = 'GEE_SENT2_RGB_2020_05'
+# dataset = 'GMAPS_RGB_2024'
+dataset = 'GEE_SENT2_RGB_2020_05'
+# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
 data_dir = '../../../dataset/slums_sp_images/' + dataset + '/'
 
 input_shape = (224, 224, 3)
@@ -41,14 +44,14 @@ images = []
 labels = []
 
 for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+    if filename.endswith('.tif'):
+        name = filename.split('.tif')[0]
         img_class = name.split('_')[1]
         labels.append(int(img_class))
         
         img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        # image = load_png_image(img_path)
+        image = load_tiff_image(img_path)
         images.append(image)
 
 labels = utils.to_categorical(labels, num_classes=2)
@@ -64,7 +67,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-base_model = ResNet50(include_top=False, input_shape=input_shape, weights=None)
+base_model = ResNet50(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -72,14 +75,15 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
+# x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
 
-# print(model.summary())
-# exit()
+print(model.summary())
+
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
 
@@ -114,24 +118,24 @@ checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath,
 
 lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
 early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-# checkpoint  = tf.keras.callbacks.ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
 callbacks_list = [checkpoint, lr_reduce, early]
 
-print('TRAINING MODEL -----------------------------')
+# print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
+# x_train = np.squeeze(x_train)
+# x_val = np.squeeze(x_val)
+# x_test = np.squeeze(x_test)
 
-history = model.fit(x_train, y_train, 
-          validation_data=(x_val, y_val),
+history = model.fit(
+          x_train, y_train, 
           batch_size=32, 
+          validation_data=(x_val, y_val),
           epochs=100, 
           verbose=1,
           callbacks=callbacks_list)
 
-### storing Model in JSON --------------------------------------------------
+## storing Model in JSON --------------------------------------------------
 
 model_json = model.to_json()
 
@@ -141,29 +145,24 @@ with open("./results/model_{}.json".format(dataset), "w") as json_file:
 
 ### evaluate model ---------------------------------------------------------
 
+weights_path = "./results/{}.weights.h5".format(dataset)
+model.load_weights(weights_path)
+
 score = model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
+print('Test all scores:', score) 
 
-# ==================== FROM SCRATCH ====================
-# SENTINEL
-# Test loss: 0.34732505679130554
-# Test accuracy: 0.8617021441459656
+### Confusion Matrix -------------------------------------------------------
 
-# GOOGLE MAPS
-# Test loss: 0.4443530738353729
-# Test accuracy: 0.8909574747085571
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+y_true = np.argmax(y_test, axis=1)
 
-# ==================== IMAGENET PRETREINED ====================
-# SENTINEL
-# Test loss: 
-# Test accuracy: 
+cm = confusion_matrix(y_true, y_pred_classes)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap=plt.cm.Blues)
 
-# GOOGLE MAPS
-# Test loss: 
-# Test accuracy:
-
-
-# img = np.array([load_tiff_image('../dataset/slums_sp_images/GEE_SENT2_RGB_2020_05/4450_1.tif')])
-# pred = model.predict(images)
-# print(pred)
+# Save the confusion matrix as an image file
+plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.close()

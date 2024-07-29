@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import EfficientNetV2L
+from tensorflow.keras.applications import ResNet101V2
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -12,9 +12,6 @@ import os
 from PIL import Image 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
-from tensorflow.keras.applications.resnet50 import preprocess_input
-
 
 print('IMPORT DATA -----------------------------')
 
@@ -60,7 +57,7 @@ for filename in os.listdir(data_dir):
 labels = utils.to_categorical(labels, num_classes=2)
 images = np.array(images)
 labels = np.array(labels)
-print(len(labels))
+print(labels)
 train_ratio = 0.7
 val_ratio = 0.15
 test_ratio = 0.15
@@ -70,18 +67,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-def se_block(input_tensor, ratio=16):
-    channel_axis = -1  # TensorFlow channels_last format
-    filters = input_tensor.shape[channel_axis]
-
-    se = GlobalAveragePooling2D()(input_tensor)
-    se = Reshape((1, 1, filters))(se)
-    se = Dense(filters // ratio, activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
-    se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
-    x = multiply([input_tensor, se])
-    return x
-
-base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = ResNet101V2(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -89,7 +75,7 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
-x = se_block(x)  # Adding SE block after the base model output
+# x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
@@ -141,9 +127,10 @@ x_train = np.squeeze(x_train)
 x_val = np.squeeze(x_val)
 x_test = np.squeeze(x_test)
 
-history = model.fit(x_train, y_train, 
+history = model.fit(
+          x_train, y_train, 
+          batch_size=32, 
           validation_data=(x_val, y_val),
-          batch_size=64, 
           epochs=100, 
           verbose=1,
           callbacks=callbacks_list)
@@ -158,8 +145,8 @@ with open("./results/model_{}.json".format(dataset), "w") as json_file:
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}.weights.h5".format(dataset)
-model.load_weights(weights_path)
+# weights_path = "./results/{}.weights.h5".format(dataset)
+# model.load_weights(weights_path)
 
 score = model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
@@ -181,8 +168,12 @@ plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
 plt.close()
 
 
-# ==================== IMAGENET PRETREINED ====================
-# GOOGLE MAPS
-# Test loss: 
-# Test accuracy:
+# ==================== FROM SCRATCH ====================
+# SENTINEL RBG 16 epochs
 
+
+# ==================== IMAGENET PRETREINED ====================
+# GOOGLE MAPS Finetuning - 101
+# Test loss: 0.2510359585285187
+# Test accuracy: 0.9281914830207825
+# Test all scores: [0.2510359585285187, 0.9281914830207825, 1048.0, 80.0, 1048.0, 80.0, 0.9290780425071716, 0.9290780425071716, 0.9749336838722229, 0.9722745418548584, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.92876464, 0.92938095], dtype=float32)>]

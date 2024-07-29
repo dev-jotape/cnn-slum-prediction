@@ -12,12 +12,13 @@ import os
 from PIL import Image 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
 print('IMPORT DATA -----------------------------')
 
 # Define your dataset
-dataset = 'GMAPS_RGB_2024'
-# dataset = 'GEE_SENT2_RGB_2020_05'
+# dataset = 'GMAPS_RGB_2024'
+dataset = 'GEE_SENT2_RGB_2020_05'
 # dataset = 'GEE_SENT2_RGB_NIR_2020_05'
 data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
 
@@ -44,14 +45,14 @@ images = []
 labels = []
 
 for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+    if filename.endswith('.tif'):
+        name = filename.split('.tif')[0]
         img_class = name.split('_')[1]
         labels.append(int(img_class))
         
         img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        # image = load_png_image(img_path)
+        image = load_tiff_image(img_path)
         images.append(image)
 
 labels = utils.to_categorical(labels, num_classes=2)
@@ -108,39 +109,39 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-# filepath="./results/{}.weights.h5".format(dataset)
-# checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
-#                              monitor='val_accuracy', 
-#                              verbose=1, 
-#                              save_best_only=True,
-#                              save_weights_only=True,
-#                              mode='max')
+filepath="./results/{}.weights.h5".format(dataset)
+checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
+                             monitor='val_accuracy', 
+                             verbose=1, 
+                             save_best_only=True,
+                             save_weights_only=True,
+                             mode='max')
 
-# lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
-# early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
-# callbacks_list = [checkpoint, lr_reduce, early]
+lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.1, min_delta=1e-5, patience=3, verbose=0)
+early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
+callbacks_list = [checkpoint, lr_reduce, early]
 
-# print('TRAINING MODEL -----------------------------')
+print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
 x_train = np.squeeze(x_train)
 x_val = np.squeeze(x_val)
 x_test = np.squeeze(x_test)
 
-# history = model.fit(
-#           x_train, y_train, 
-#           batch_size=32, 
-#           validation_data=(x_val, y_val),
-#           epochs=100, 
-#           verbose=1,
-#           callbacks=callbacks_list)
+history = model.fit(
+          x_train, y_train, 
+          batch_size=32, 
+          validation_data=(x_val, y_val),
+          epochs=100, 
+          verbose=1,
+          callbacks=callbacks_list)
 
 ### storing Model in JSON --------------------------------------------------
 
-# model_json = model.to_json()
+model_json = model.to_json()
 
-# with open("./results/model_{}.json".format(dataset), "w") as json_file:
-#     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
+with open("./results/model_{}.json".format(dataset), "w") as json_file:
+    json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
