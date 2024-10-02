@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import DenseNet201
+from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -19,7 +19,7 @@ city = 'pa'
 # dataset = 'GMAPS_RGB_2024'
 # dataset = 'GEE_SENT2_RGB_2020_05'
 dataset = 'GEE_SENT2_RGB_2023'
-data_dir = '../../dataset/slums_{}_images/{}/'.format(city, dataset)
+data_dir = '../../../dataset/slums_{}_images/{}/'.format(city, dataset)
 
 input_shape = (224, 224, 3)
 
@@ -61,10 +61,10 @@ print(len(labels))
 
 print('CREATE MODEL -----------------------------')
 
-base_model = DenseNet201(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = ResNet50(include_top=False, input_shape=input_shape)
 
 for i, layer in enumerate(base_model.layers):
-    layer.trainable = True
+    layer.trainable = False
     print(i, layer.name, layer.trainable)
 
 # Create a new model instance with the top layer
@@ -142,53 +142,53 @@ plt.close()
 
 # ==================== IMAGENET PRETREINED - GOOGLE MAPS ====================
 # RJ
-# Test loss: 0.3744516372680664
-# Test accuracy: 0.878000020980835
-# Test all scores: [0.3744516372680664, 0.878000020980835, 882.0, 131.0, 869.0, 118.0, 0.8706811666488647, 0.8820000290870667, 0.9355429410934448, 0.9256573915481567, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8838951 , 0.86772484], dtype=float32)>]
+# Test loss: 0.8567430973052979
+# Test accuracy: 0.8569999933242798
+# Test all scores: [0.8567430973052979, 0.8569999933242798, 859.0, 145.0, 855.0, 141.0, 0.8555777072906494, 0.859000027179718, 0.9152384996414185, 0.8986262083053589, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8519269 , 0.86247545], dtype=float32)>]
 
 # BH
-# Test loss: 0.22384999692440033
-# Test accuracy: 0.9269999861717224
-# Test all scores: [0.22384999692440033, 0.9269999861717224, 931.0, 78.0, 922.0, 69.0, 0.9226957559585571, 0.9309999942779541, 0.9712909460067749, 0.9659124612808228, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9256038 , 0.92813134], dtype=float32)>]
+# Test loss: 0.49826982617378235
+# Test accuracy: 0.9259999990463257
+# Test all scores: [0.49826982617378235, 0.9259999990463257, 927.0, 77.0, 923.0, 73.0, 0.9233067631721497, 0.9269999861717224, 0.9634705185890198, 0.9547291398048401, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.92673266, 0.9235412 ], dtype=float32)>]
 
 # BR
-# Test loss: 0.8458794951438904
-# Test accuracy: 0.7429999709129333
-# Test all scores: [0.8458794951438904, 0.7429999709129333, 746.0, 259.0, 741.0, 254.0, 0.7422885298728943, 0.7459999918937683, 0.7969590425491333, 0.766913652420044, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7912973 , 0.66753924], dtype=float32)>]
-
-# PA
-# Test loss: 1.2521886825561523
-# Test accuracy: 0.6880000233650208
-# Test all scores: [1.2521886825561523, 0.6880000233650208, 692.0, 316.0, 684.0, 308.0, 0.6865079402923584, 0.6919999718666077, 0.7182239890098572, 0.6893815994262695, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7436527, 0.6048284], dtype=float32)>]
+# Test loss: 1.2612475156784058
+# Test accuracy: 0.8159999847412109
+# Test all scores: [1.2612475156784058, 0.8159999847412109, 821.0, 181.0, 819.0, 179.0, 0.8193612694740295, 0.8209999799728394, 0.8701614737510681, 0.8431018590927124, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8433946 , 0.78928983], dtype=float32)>]
 
 # SSA
-# Test loss: 0.9309507608413696
-# Test accuracy: 0.75
-# Test all scores: [0.9309507608413696, 0.75, 752.0, 257.0, 743.0, 248.0, 0.7452923655509949, 0.7519999742507935, 0.7912524342536926, 0.7577162981033325, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.78305084, 0.699638  ], dtype=float32)>]
+# Test loss: 1.781467318534851
+# Test accuracy: 0.7300000190734863
+# Test all scores: [1.781467318534851, 0.7300000190734863, 730.0, 276.0, 724.0, 270.0, 0.7256461381912231, 0.7300000190734863, 0.7801920175552368, 0.7484380006790161, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7702702 , 0.66666657], dtype=float32)>]
+
+# PA
+# Test loss: 2.4797050952911377
+# Test accuracy: 0.6850000023841858
+# Test all scores: [2.4797050952911377, 0.6850000023841858, 686.0, 321.0, 679.0, 314.0, 0.6812313795089722, 0.6859999895095825, 0.6985085010528564, 0.6628377437591553, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.732773  , 0.61199504], dtype=float32)>]
 
 # ==================== IMAGENET PRETREINED - SENTINEL-2 ====================
 
 # RJ 
-# Test loss: 2.748530864715576
-# Test accuracy: 0.6480000019073486
-# Test all scores: [2.748530864715576, 0.6480000019073486, 647.0, 349.0, 651.0, 353.0, 0.6495984196662903, 0.6470000147819519, 0.6795564889907837, 0.6461659669876099, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7229676 , 0.51851845], dtype=float32)>]
+# Test loss: 3.948249101638794
+# Test accuracy: 0.6389999985694885
+# Test all scores: [3.948249101638794, 0.6389999985694885, 646.0, 374.0, 626.0, 354.0, 0.6333333253860474, 0.6460000276565552, 0.6614595055580139, 0.629518449306488, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7161437 , 0.49929872], dtype=float32)>]
 
 # BH
-# Test loss: 0.724210262298584
-# Test accuracy: 0.8080000281333923
-# Test all scores: [0.724210262298584, 0.8080000281333923, 806.0, 189.0, 811.0, 194.0, 0.8100502490997314, 0.8059999942779541, 0.8860844969749451, 0.8729925155639648, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.79265654, 0.82132834], dtype=float32)>]
+# Test loss: 0.8167446255683899
+# Test accuracy: 0.796999990940094
+# Test all scores: [0.8167446255683899, 0.796999990940094, 798.0, 207.0, 793.0, 202.0, 0.7940298318862915, 0.7979999780654907, 0.8698664903640747, 0.8563234806060791, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.77753294, 0.8113035 ], dtype=float32)>]
 
 # BR
-# Test loss: 0.753484308719635
-# Test accuracy: 0.8519999980926514
-# Test all scores: [0.753484308719635, 0.8519999980926514, 850.0, 144.0, 856.0, 150.0, 0.8551307916641235, 0.8500000238418579, 0.8970815539360046, 0.8756824731826782, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8507157, 0.8543306], dtype=float32)>]
+# Test loss: 1.0858465433120728
+# Test accuracy: 0.8100000023841858
+# Test all scores: [1.0858465433120728, 0.8100000023841858, 808.0, 189.0, 811.0, 192.0, 0.8104313015937805, 0.8080000281333923, 0.8635525107383728, 0.8388285636901855, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.81481475, 0.8032955 ], dtype=float32)>]
 
 # SSA
-# Test loss: 4.2765703201293945
-# Test accuracy: 0.5569999814033508
-# Test all scores: [4.2765703201293945, 0.5569999814033508, 557.0, 440.0, 560.0, 443.0, 0.55867600440979, 0.5569999814033508, 0.5756924748420715, 0.557944655418396, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.68794316, 0.24531512], dtype=float32)>]
+# Test loss: 6.289668083190918
+# Test accuracy: 0.531000018119812
+# Test all scores: [6.289668083190918, 0.531000018119812, 534.0, 473.0, 527.0, 466.0, 0.5302879810333252, 0.5339999794960022, 0.5495569705963135, 0.5368368625640869, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.67222214, 0.1763668 ], dtype=float32)>]
 
 # PA
-# Test loss: 2.2004661560058594
-# Test accuracy: 0.6380000114440918
-# Test all scores: [2.2004661560058594, 0.6380000114440918, 636.0, 361.0, 639.0, 364.0, 0.6379137635231018, 0.6359999775886536, 0.6627718806266785, 0.6321762800216675, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.71937984, 0.4865629 ], dtype=float32)>]
+# Test loss: 3.4346861839294434
+# Test accuracy: 0.6159999966621399
+# Test all scores: [3.4346861839294434, 0.6159999966621399, 620.0, 388.0, 612.0, 380.0, 0.6150793433189392, 0.6200000047683716, 0.6391685009002686, 0.6103368997573853, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.70991796, 0.43178403], dtype=float32)>]

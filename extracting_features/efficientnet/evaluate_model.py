@@ -15,11 +15,11 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
-
 print('IMPORT DATA -----------------------------')
 
 city = 'pa'
-dataset = 'GMAPS_RGB_2024'
+# dataset = 'GMAPS_RGB_2024'
+# dataset = 'GEE_SENT2_RGB_2023'
 # dataset = 'GEE_SENT2_RGB_2020_05'
 data_dir = '../../dataset/slums_{}_images/{}/'.format(city, dataset)
 
@@ -45,14 +45,14 @@ labels = []
 image_names = []
 
 for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+    if filename.endswith('.tif'):
+        name = filename.split('.tif')[0]
         img_class = name.split('_')[1]
         labels.append(int(img_class))
         
         img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        # image = load_png_image(img_path)
+        image = load_tiff_image(img_path)
         images.append(image)
         image_names.append(filename)
 
@@ -127,7 +127,7 @@ x_all = np.squeeze(images)
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}.weights.h5".format(dataset)
+weights_path = "./results/{}.weights.h5".format("GEE_SENT2_RGB_2020_05")
 model.load_weights(weights_path)
 
 score = model.evaluate(x_all, labels, verbose=1)
@@ -191,3 +191,23 @@ plt.close()
 # Test loss: 1.9488403797149658
 # Test accuracy: 0.7080000042915344
 # Test all scores: [1.9488403797149658, 0.7080000042915344, 710.0, 297.0, 703.0, 290.0, 0.7050645351409912, 0.7099999785423279, 0.753227949142456, 0.719009518623352, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.73889863, 0.66742337], dtype=float32)>]
+
+# BH
+# Test loss: 0.90870600938797
+# Test accuracy: 0.8140000104904175
+# Test all scores: [0.90870600938797, 0.8140000104904175, 815.0, 185.0, 815.0, 185.0, 0.8149999976158142, 0.8149999976158142, 0.8795619606971741, 0.8593940138816833, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.79697615, 0.83053994], dtype=float32)>]
+
+# BR
+# Test loss: 0.9075028896331787
+# Test accuracy: 0.8450000286102295
+# Test all scores: [0.9075028896331787, 0.8450000286102295, 845.0, 155.0, 845.0, 155.0, 0.8450000286102295, 0.8450000286102295, 0.8933759927749634, 0.8709887266159058, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8456913 , 0.84431136], dtype=float32)>]
+
+# SSA
+# Test loss: 5.411379337310791
+# Test accuracy: 0.5619999766349792
+# Test all scores: [5.411379337310791, 0.5619999766349792, 560.0, 438.0, 562.0, 440.0, 0.5611222386360168, 0.5600000023841858, 0.5843589901924133, 0.5646640062332153, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.6783625, 0.3047619], dtype=float32)>]
+
+# PA
+# Test loss: 2.3833789825439453
+# Test accuracy: 0.6620000004768372
+# Test all scores: [2.3833789825439453, 0.6620000004768372, 666.0, 340.0, 660.0, 334.0, 0.6620278358459473, 0.6660000085830688, 0.6928899884223938, 0.6582636833190918, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7129551, 0.5939393], dtype=float32)>]

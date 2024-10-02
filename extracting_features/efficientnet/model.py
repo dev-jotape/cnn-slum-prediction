@@ -14,7 +14,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
 from tensorflow.keras.applications.resnet50 import preprocess_input
-
+import datetime
 
 print('IMPORT DATA -----------------------------')
 
@@ -46,10 +46,24 @@ def load_png_image(file_path):
 images = []
 labels = []
 
+totalSlum = 0
+totalNonSlum = 0
+
 for filename in os.listdir(data_dir):
     if filename.endswith('.png'):
         name = filename.split('.png')[0]
         img_class = name.split('_')[1]
+
+        if img_class == '1':
+            totalSlum = totalSlum + 1
+            if totalSlum >= 1500:
+                continue
+
+        if img_class == '0':
+            totalNonSlum = totalNonSlum + 1
+            if totalNonSlum >= 1500:
+                continue
+
         labels.append(int(img_class))
         
         img_path = os.path.join(data_dir, filename)
@@ -122,7 +136,7 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
+filepath="./results/{}_sp.weights.h5".format(dataset)
 checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
                              monitor='val_accuracy', 
                              verbose=1, 
@@ -152,13 +166,13 @@ history = model.fit(x_train, y_train,
 
 model_json = model.to_json()
 
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
+with open("./results/model_{}_sp.json".format(dataset), "w") as json_file:
     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}.weights.h5".format(dataset)
+weights_path = "./results/{}_sp.weights.h5".format(dataset)
 model.load_weights(weights_path)
 
 score = model.evaluate(x_test, y_test, verbose=1)
@@ -177,7 +191,7 @@ disp = ConfusionMatrixDisplay(confusion_matrix=cm)
 disp.plot(cmap=plt.cm.Blues)
 
 # Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
+plt.savefig("./results/confusion_matrix_{}_sp.png".format(dataset))
 plt.close()
 
 
