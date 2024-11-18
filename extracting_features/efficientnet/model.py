@@ -15,14 +15,17 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
 from tensorflow.keras.applications.resnet50 import preprocess_input
 import datetime
+from sklearn.metrics import roc_curve, auc
 
 print('IMPORT DATA -----------------------------')
 
-# Define your dataset
-dataset = 'GMAPS_RGB_2024'
+version = 'v1_se'
+image_format = 'png'
+target_city = 'sp'
+target_dataset = 'GMAPS_RGB_{}_2024'.format(target_city.upper())
 # dataset = 'GEE_SENT2_RGB_2020_05'
 # dataset = 'GEE_SENT2_RGB_NIR_2020_05'
-data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
+target_data_dir = '../../dataset/gmaps_slums/{}'.format(target_dataset)
 
 input_shape = (224, 224, 3)
 
@@ -49,26 +52,17 @@ labels = []
 totalSlum = 0
 totalNonSlum = 0
 
-for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+for filename in os.listdir(target_data_dir):
+    if filename.endswith('.' + image_format):
+        name = filename.split('.' + image_format)[0]
         img_class = name.split('_')[1]
-
-        if img_class == '1':
-            totalSlum = totalSlum + 1
-            if totalSlum >= 1500:
-                continue
-
-        if img_class == '0':
-            totalNonSlum = totalNonSlum + 1
-            if totalNonSlum >= 1500:
-                continue
-
         labels.append(int(img_class))
         
-        img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        img_path = os.path.join(target_data_dir, filename)
+        if image_format == 'png':
+            image = load_png_image(img_path)
+        else:
+            image = load_tiff_image(img_path)
         images.append(image)
 
 labels = utils.to_categorical(labels, num_classes=2)
@@ -110,7 +104,7 @@ x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
 
-print(model.summary())
+# print(model.summary())
 
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
@@ -136,7 +130,7 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}_sp.weights.h5".format(dataset)
+filepath="../../dataset/results/{}/{}.weights.h5".format(target_city, version)
 checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
                              monitor='val_accuracy', 
                              verbose=1, 
@@ -151,9 +145,10 @@ callbacks_list = [checkpoint, lr_reduce, early]
 print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
+if image_format == 'png':
+    x_train = np.squeeze(x_train)
+    x_val = np.squeeze(x_val)
+    x_test = np.squeeze(x_test)
 
 history = model.fit(x_train, y_train, 
           validation_data=(x_val, y_val),
@@ -162,17 +157,17 @@ history = model.fit(x_train, y_train,
           verbose=1,
           callbacks=callbacks_list)
 
-## storing Model in JSON --------------------------------------------------
+# storing Model in JSON --------------------------------------------------
 
 model_json = model.to_json()
 
-with open("./results/model_{}_sp.json".format(dataset), "w") as json_file:
+with open("../../dataset/results/{}/{}.json".format(target_city, version), "w") as json_file:
     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}_sp.weights.h5".format(dataset)
+weights_path = "../../dataset/results/{}/{}.weights.h5".format(target_city, version)
 model.load_weights(weights_path)
 
 score = model.evaluate(x_test, y_test, verbose=1)
@@ -180,20 +175,62 @@ print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
 print('Test all scores:', score) 
 
+# SP c/ SE: Test all scores: [0.2524867355823517, 0.936170220375061, 1053.0, 70.0, 1058.0, 75.0, 0.9376669526100159, 0.9335106611251831, 0.9759907722473145, 0.9718819856643677, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9346463, 0.9365078], dtype=float32)>]
+
+# BH s/ SE: Test all scores: [0.22615084052085876, 0.9311110973358154, 415.0, 30.0, 420.0, 35.0, 0.932584285736084, 0.9222221970558167, 0.9805530309677124, 0.977677583694458, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9244444, 0.930337 ], dtype=float32)>]
+
+# BR s/ SE: Test all scores: [0.5444946885108948, 0.8999999761581421, 403.0, 45.0, 405.0, 47.0, 0.8995535969734192, 0.8955555558204651, 0.9437727928161621, 0.9309614896774292, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9032257 , 0.89145494], dtype=float32)>]
+# BR c/ SE: Test all scores: [0.5356412529945374, 0.8999999761581421, 400.0, 45.0, 405.0, 50.0, 0.898876428604126, 0.8888888955116272, 0.9404543042182922, 0.9299705028533936, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8947368, 0.8929384], dtype=float32)>]
+
+# PA s/ SE: Test all scores: [0.9034299254417419, 0.8133333325386047, 359.0, 87.0, 363.0, 91.0, 0.804932713508606, 0.7977777719497681, 0.868636965751648, 0.8490833044052124, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.79907614, 0.8034556 ], dtype=float32)>]
+# PA c/ SE: Test all scores: [0.8783915638923645, 0.8111110925674438, 363.0, 86.0, 364.0, 87.0, 0.8084632754325867, 0.8066666722297668, 0.8578295707702637, 0.835511326789856, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.80182225, 0.81304336], dtype=float32)>]
+
+# RJ s/ SE: Test all scores: [0.33343449234962463, 0.897777795791626, 395.0, 44.0, 406.0, 55.0, 0.8997722268104553, 0.8777777552604675, 0.9470025897026062, 0.94038987159729, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.87962955, 0.8971552 ], dtype=float32)>]
+# RJ c/ SE: Test all scores: [0.4014453589916229, 0.9088888764381409, 411.0, 41.0, 409.0, 39.0, 0.9092920422554016, 0.9133333563804626, 0.961350679397583, 0.9555040597915649, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.90786505, 0.9146608 ], dtype=float32)>]
+
+# SSA s/ SE: Test all scores: [0.61859130859375, 0.8533333539962769, 381.0, 64.0, 386.0, 69.0, 0.8561797738075256, 0.846666693687439, 0.9092419147491455, 0.896021842956543, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.84943813, 0.85333323], dtype=float32)>]
+# SSA c/ SE: Test all scores: [0.593754768371582, 0.8355555534362793, 375.0, 73.0, 377.0, 75.0, 0.8370535969734192, 0.8333333134651184, 0.9037777781486511, 0.8933566808700562, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8290398, 0.8407642], dtype=float32)>]
+
 ### Confusion Matrix -------------------------------------------------------
 
-y_pred = model.predict(x_test)
-y_pred_classes = np.argmax(y_pred, axis=1)
+# y_pred = model.predict(x_test)
+# y_pred_classes = np.argmax(y_pred, axis=1)
+# y_true = np.argmax(y_test, axis=1)
+
+# cm = confusion_matrix(y_true, y_pred_classes)
+# disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+# disp.plot(cmap=plt.cm.Blues)
+
+# # Save the confusion matrix as an image file
+# plt.savefig("./results/{}/confusion_matrix_{}_sp.png".format(target_city, version))
+# plt.close()
+
+### ROC curve -------------------------------------------------------
+
+y_pred_probs = model.predict(x_test)[:, 1]  # Pega a probabilidade da classe 1
 y_true = np.argmax(y_test, axis=1)
 
-cm = confusion_matrix(y_true, y_pred_classes)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot(cmap=plt.cm.Blues)
+# Calcula os valores da curva ROC
+fpr, tpr, thresholds = roc_curve(y_true, y_pred_probs)
+roc_auc = auc(fpr, tpr)
 
-# Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}_sp.png".format(dataset))
-plt.close()
+# Plota a curva ROC
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random guess')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.grid(alpha=0.3)
 
+# Salva a curva ROC como uma imagem
+roc_curve_path = "./results/{}/roc_curve_{}.png".format(target_city, version)
+plt.savefig(roc_curve_path)
+plt.show()
+print(f"ROC curve saved to {roc_curve_path}")
 
 # ==================== IMAGENET PRETREINED ====================
 # GOOGLE MAPS
