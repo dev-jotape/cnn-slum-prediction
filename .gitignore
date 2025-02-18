@@ -10,3 +10,8 @@ __pycache__/
 *.png
 *.tif
 *.npy
+dataset/
+.venv
+.DS_Store
+*.hdf
+*.csv
