@@ -16,10 +16,13 @@ from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, mult
 from tensorflow.keras.applications.resnet50 import preprocess_input
 import datetime
 from sklearn.metrics import roc_curve, auc
+import time
 
 print('IMPORT DATA -----------------------------')
+start = time.time()
 
-version = 'v1_se'
+
+version = 'v2_time'
 image_format = 'png'
 target_city = 'sp'
 target_dataset = 'GMAPS_RGB_{}_2024'.format(target_city.upper())
@@ -175,6 +178,10 @@ print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
 print('Test all scores:', score) 
 
+stop = time.time()
+print(f"Training time: {stop - start}s")
+
+
 # SP c/ SE: Test all scores: [0.2524867355823517, 0.936170220375061, 1053.0, 70.0, 1058.0, 75.0, 0.9376669526100159, 0.9335106611251831, 0.9759907722473145, 0.9718819856643677, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9346463, 0.9365078], dtype=float32)>]
 
 # BH s/ SE: Test all scores: [0.22615084052085876, 0.9311110973358154, 415.0, 30.0, 420.0, 35.0, 0.932584285736084, 0.9222221970558167, 0.9805530309677124, 0.977677583694458, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9244444, 0.930337 ], dtype=float32)>]
@@ -207,30 +214,30 @@ print('Test all scores:', score)
 
 ### ROC curve -------------------------------------------------------
 
-y_pred_probs = model.predict(x_test)[:, 1]  # Pega a probabilidade da classe 1
-y_true = np.argmax(y_test, axis=1)
+# y_pred_probs = model.predict(x_test)[:, 1]  # Pega a probabilidade da classe 1
+# y_true = np.argmax(y_test, axis=1)
 
-# Calcula os valores da curva ROC
-fpr, tpr, thresholds = roc_curve(y_true, y_pred_probs)
-roc_auc = auc(fpr, tpr)
+# # Calcula os valores da curva ROC
+# fpr, tpr, thresholds = roc_curve(y_true, y_pred_probs)
+# roc_auc = auc(fpr, tpr)
 
-# Plota a curva ROC
-plt.figure(figsize=(8, 6))
-plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
-plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random guess')
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('Receiver Operating Characteristic')
-plt.legend(loc="lower right")
-plt.grid(alpha=0.3)
+# # Plota a curva ROC
+# plt.figure(figsize=(8, 6))
+# plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+# plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random guess')
+# plt.xlim([0.0, 1.0])
+# plt.ylim([0.0, 1.05])
+# plt.xlabel('False Positive Rate')
+# plt.ylabel('True Positive Rate')
+# plt.title('Receiver Operating Characteristic')
+# plt.legend(loc="lower right")
+# plt.grid(alpha=0.3)
 
-# Salva a curva ROC como uma imagem
-roc_curve_path = "./results/{}/roc_curve_{}.png".format(target_city, version)
-plt.savefig(roc_curve_path)
-plt.show()
-print(f"ROC curve saved to {roc_curve_path}")
+# # Salva a curva ROC como uma imagem
+# roc_curve_path = "./results/{}/roc_curve_{}.png".format(target_city, version)
+# plt.savefig(roc_curve_path)
+# plt.show()
+# print(f"ROC curve saved to {roc_curve_path}")
 
 # ==================== IMAGENET PRETREINED ====================
 # GOOGLE MAPS
