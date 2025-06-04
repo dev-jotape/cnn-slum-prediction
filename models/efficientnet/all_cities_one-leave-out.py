@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications import EfficientNetV2L
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -10,20 +10,14 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
 
 print('IMPORT DATA -----------------------------')
 
-# Define your dataset
-# dataset = 'GMAPS_RGB_2024'
-dataset = 'GEE_SENT2_RGB_2020_05'
-# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
-data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
+version = 'sp_v1'
+image_format = 'tif'
 
 input_shape = (224, 224, 3)
 
-# Function to load TIFF images
 def load_tiff_image(file_path):
     with rasterio.open(file_path) as src:
         image = src.read([1, 2, 3])  # Read the first three bands
@@ -39,50 +33,86 @@ def load_png_image(file_path):
     x = preprocess_input(x)
     return x
 
+def load_images(target_data_dir):
+    labels = []
+    images = []
+
+    for filename in os.listdir(target_data_dir):
+        if filename.endswith('.' + image_format):
+            name = filename.split('.' + image_format)[0]
+            img_class = name.split('_')[1]
+            labels.append(int(img_class))
+            
+            img_path = os.path.join(target_data_dir, filename)
+            if image_format == 'png':
+                image = load_png_image(img_path)
+            else:
+                image = load_tiff_image(img_path)
+
+            images.append(image)
+
+    labels = utils.to_categorical(labels, num_classes=2)
+    images = np.array(images)
+    labels = np.array(labels)
+
+    return images, labels
+
+# get images from all cities
+source = 'sentinel2' # 'gmaps'
+sp_data_dir = '../../dataset/' + source + '/SP_2024'
+rj_data_dir = '../../dataset/' + source + '/RJ_2024'
+bh_data_dir = '../../dataset/' + source + '/BH_2024'
+br_data_dir = '../../dataset/' + source + '/BR_2024'
+ssa_data_dir = '../../dataset/' + source + '/SSA_2024'
+pa_data_dir = '../../dataset/' + source + '/PA_2024'
+
+sp_x_train_val, sp_y_train_val = load_images(sp_data_dir)
+rj_x_train_val, rj_y_train_val = load_images(rj_data_dir)
+bh_x_train_val, bh_y_train_val = load_images(bh_data_dir)
+br_x_train_val, br_y_train_val = load_images(br_data_dir)
+ssa_x_train_val, ssa_y_train_val = load_images(ssa_data_dir)
+pa_x_train_val, pa_y_train_val = load_images(pa_data_dir)
+
 # Load dataset
-images = []
-labels = []
+x_train_val = np.concatenate((
+    # sp_x_train_val, #remove target city
+    rj_x_train_val, 
+    bh_x_train_val, 
+    br_x_train_val, 
+    ssa_x_train_val, 
+    pa_x_train_val
+), axis=0)
+y_train_val = np.concatenate((
+    # sp_y_train_val, #remove target city
+    rj_y_train_val, 
+    bh_y_train_val, 
+    br_y_train_val, 
+    ssa_y_train_val, 
+    pa_y_train_val
+), axis=0)
+x_test  = pa_x_train_val
+y_test  = pa_y_train_val
 
-for filename in os.listdir(data_dir):
-    if filename.endswith('.tif'):
-        name = filename.split('.tif')[0]
-        img_class = name.split('_')[1]
-        labels.append(int(img_class))
-        
-        img_path = os.path.join(data_dir, filename)
-        # image = load_png_image(img_path)
-        image = load_tiff_image(img_path)
-        images.append(image)
-
-labels = utils.to_categorical(labels, num_classes=2)
-images = np.array(images)
-labels = np.array(labels)
-print(labels)
 train_ratio = 0.7
 val_ratio = 0.15
-test_ratio = 0.15
-
-x_train_val, x_test, y_train_val, y_test = train_test_split(images, labels, stratify=labels, test_size=test_ratio, random_state=123)
 x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stratify=y_train_val, test_size=val_ratio/(train_ratio+val_ratio), random_state=123)
 
 print('CREATE MODEL -----------------------------')
 
-base_model = VGG16(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
-    print(i, layer.name, layer.trainable)
 
 # Create a new model instance with the top layer
 x = base_model.output
-# x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
 
-print(model.summary())
+# print(model.summary())
 
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
@@ -108,7 +138,7 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
+filepath="../../dataset/results/leave_one_out/{}/model.weights.h5".format(version)
 checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
                              monitor='val_accuracy', 
                              verbose=1, 
@@ -120,49 +150,33 @@ lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', facto
 early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
 callbacks_list = [checkpoint, lr_reduce, early]
 
-# print('TRAINING MODEL -----------------------------')
+print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-# x_train = np.squeeze(x_train)
-# x_val = np.squeeze(x_val)
-# x_test = np.squeeze(x_test)
+if image_format == 'png':
+    x_train = np.squeeze(x_train)
+    x_val = np.squeeze(x_val)
+    x_test = np.squeeze(x_test)
 
-history = model.fit(
-          x_train, y_train, 
-          batch_size=32, 
+history = model.fit(x_train, y_train, 
           validation_data=(x_val, y_val),
+          batch_size=32, 
           epochs=100, 
           verbose=1,
           callbacks=callbacks_list)
 
-## storing Model in JSON --------------------------------------------------
+# storing Model in JSON --------------------------------------------------
 
 model_json = model.to_json()
 
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
+with open("../../dataset/results/leave_one_out/{}/model.json".format(version), "w") as json_file:
     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}.weights.h5".format(dataset)
+weights_path = "../../dataset/results/leave_one_out/{}/model.weights.h5".format(version)
 model.load_weights(weights_path)
 
 score = model.evaluate(x_test, y_test, verbose=1)
-print('Test loss:', score[0])
-print('Test accuracy:', score[1]) 
-print('Test all scores:', score) 
-
-### Confusion Matrix -------------------------------------------------------
-
-y_pred = model.predict(x_test)
-y_pred_classes = np.argmax(y_pred, axis=1)
-y_true = np.argmax(y_test, axis=1)
-
-cm = confusion_matrix(y_true, y_pred_classes)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot(cmap=plt.cm.Blues)
-
-# Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
-plt.close()
+print('out:', score)

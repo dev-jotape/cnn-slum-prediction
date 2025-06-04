@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications import VGG19
+from tensorflow.keras.applications import EfficientNetV2L
 from tensorflow.keras.optimizers import Adam
 import numpy as np
 import tensorflow.keras.utils as utils
@@ -10,16 +10,18 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
+import time
 
 print('IMPORT DATA -----------------------------')
+start = time.time()
 
-# Define your dataset
-dataset = 'GMAPS_RGB_2024'
-# dataset = 'GEE_SENT2_RGB_2020_05'
-# dataset = 'GEE_SENT2_RGB_NIR_2020_05'
-data_dir = '../../dataset/slums_sp_images/' + dataset + '/'
+
+version = 'v1'
+image_format = 'tiff'
+target_city = 'sp'
+source = 'sentinel2' # 'gmaps'
+target_dataset = '{}_2024'.format(target_city.upper())
+target_data_dir = '../../dataset/{}/{}'.format(source, target_dataset)
 
 input_shape = (224, 224, 3)
 
@@ -43,21 +45,23 @@ def load_png_image(file_path):
 images = []
 labels = []
 
-for filename in os.listdir(data_dir):
-    if filename.endswith('.png'):
-        name = filename.split('.png')[0]
+for filename in os.listdir(target_data_dir):
+    if filename.endswith('.' + image_format):
+        name = filename.split('.' + image_format)[0]
         img_class = name.split('_')[1]
         labels.append(int(img_class))
         
-        img_path = os.path.join(data_dir, filename)
-        image = load_png_image(img_path)
-        # image = load_tiff_image(img_path)
+        img_path = os.path.join(target_data_dir, filename)
+        if image_format == 'png':
+            image = load_png_image(img_path)
+        else:
+            image = load_tiff_image(img_path)
         images.append(image)
 
 labels = utils.to_categorical(labels, num_classes=2)
 images = np.array(images)
 labels = np.array(labels)
-print(labels)
+
 train_ratio = 0.7
 val_ratio = 0.15
 test_ratio = 0.15
@@ -67,7 +71,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stra
 
 print('CREATE MODEL -----------------------------')
 
-base_model = VGG19(include_top=False, input_shape=input_shape, weights='imagenet')
+base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
 
 for i, layer in enumerate(base_model.layers):
     layer.trainable = True
@@ -75,14 +79,11 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
-# x = tf.keras.layers.GlobalAveragePooling2D()(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
 predictions = tf.keras.layers.Dense(2, activation='sigmoid')(x)
 model = tf.keras.Model(inputs = base_model.input, outputs = predictions)
-
-print(model.summary())
 
 lr = 1e-4
 optimizer = Adam(learning_rate=lr)
@@ -108,7 +109,7 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="./results/{}.weights.h5".format(dataset)
+filepath="../../dataset/results/{}/{}.weights.h5".format(target_city, version)
 checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
                              monitor='val_accuracy', 
                              verbose=1, 
@@ -120,32 +121,32 @@ lr_reduce   = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', facto
 early       = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=5, mode='max')
 callbacks_list = [checkpoint, lr_reduce, early]
 
-# print('TRAINING MODEL -----------------------------')
+print('TRAINING MODEL -----------------------------')
 
 # if using PNG file use squeeze
-x_train = np.squeeze(x_train)
-x_val = np.squeeze(x_val)
-x_test = np.squeeze(x_test)
+if image_format == 'png':
+    x_train = np.squeeze(x_train)
+    x_val = np.squeeze(x_val)
+    x_test = np.squeeze(x_test)
 
-history = model.fit(
-          x_train, y_train, 
-          batch_size=32, 
+history = model.fit(x_train, y_train, 
           validation_data=(x_val, y_val),
+          batch_size=64, 
           epochs=100, 
           verbose=1,
           callbacks=callbacks_list)
 
-## storing Model in JSON --------------------------------------------------
+# storing Model in JSON --------------------------------------------------
 
 model_json = model.to_json()
 
-with open("./results/model_{}.json".format(dataset), "w") as json_file:
+with open("../../dataset/results/{}/{}.json".format(target_city, version), "w") as json_file:
     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "./results/{}.weights.h5".format(dataset)
+weights_path = "../../dataset/results/{}/{}.weights.h5".format(target_city, version)
 model.load_weights(weights_path)
 
 score = model.evaluate(x_test, y_test, verbose=1)
@@ -153,16 +154,5 @@ print('Test loss:', score[0])
 print('Test accuracy:', score[1]) 
 print('Test all scores:', score) 
 
-### Confusion Matrix -------------------------------------------------------
-
-y_pred = model.predict(x_test)
-y_pred_classes = np.argmax(y_pred, axis=1)
-y_true = np.argmax(y_test, axis=1)
-
-cm = confusion_matrix(y_true, y_pred_classes)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot(cmap=plt.cm.Blues)
-
-# Save the confusion matrix as an image file
-plt.savefig("./results/confusion_matrix_{}.png".format(dataset))
-plt.close()
+stop = time.time()
+print(f"Training time: {stop - start}s")

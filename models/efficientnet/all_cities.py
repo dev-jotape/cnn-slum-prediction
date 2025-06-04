@@ -10,17 +10,11 @@ import rasterio
 import numpy as np
 import os
 from PIL import Image 
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
-from tensorflow.keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply
-from tensorflow.keras.applications.resnet50 import preprocess_input
-import datetime
 
 print('IMPORT DATA -----------------------------')
 
-version = 'v2_tif'
-image_format = 'tif'
-target_city = 'all'
+version = 'sp_v1'
+image_format = 'tiff'
 
 input_shape = (224, 224, 3)
 
@@ -44,23 +38,10 @@ def load_images(target_data_dir):
     labels = []
     images = []
 
-    totalSlum = 0
-    totalNonSlum = 0
-
     for filename in os.listdir(target_data_dir):
         if filename.endswith('.' + image_format):
             name = filename.split('.' + image_format)[0]
             img_class = name.split('_')[1]
-
-            if img_class == '1':
-                totalSlum = totalSlum + 1
-                if totalSlum > 1500:
-                    continue
-
-            if img_class == '0':
-                totalNonSlum = totalNonSlum + 1
-                if totalNonSlum > 1500:
-                    continue 
 
             labels.append(int(img_class))
             
@@ -74,18 +55,19 @@ def load_images(target_data_dir):
     labels = utils.to_categorical(labels, num_classes=2)
     images = np.array(images)
     labels = np.array(labels)
-    print(len(labels))
+
     test_ratio = 0.15
     x_train_val, x_test, y_train_val, y_test = train_test_split(images, labels, stratify=labels, test_size=test_ratio, random_state=123)
     return x_train_val, x_test, y_train_val, y_test
 
 # get images from all cities
-sp_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_SP_2024'
-rj_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_RJ_2024'
-bh_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_BH_2024'
-br_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_BR_2024'
-ssa_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_SSA_2024'
-pa_data_dir = '../../dataset/sentinel2_slums/GEE_SENT2_RGB_PA_2024'
+source = 'sentinel2' # 'gmaps'
+sp_data_dir = '../../dataset/' + source + '/SP_2024'
+rj_data_dir = '../../dataset/' + source + '/RJ_2024'
+bh_data_dir = '../../dataset/' + source + '/BH_2024'
+br_data_dir = '../../dataset/' + source + '/BR_2024'
+ssa_data_dir = '../../dataset/' + source + '/SSA_2024'
+pa_data_dir = '../../dataset/' + source + '/PA_2024'
 
 sp_x_train_val, sp_x_test, sp_y_train_val, sp_y_test = load_images(sp_data_dir)
 rj_x_train_val, rj_x_test, rj_y_train_val, rj_y_test = load_images(rj_data_dir)
@@ -104,24 +86,7 @@ train_ratio = 0.7
 val_ratio = 0.15
 x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, stratify=y_train_val, test_size=val_ratio/(train_ratio+val_ratio), random_state=123)
 
-print(len(x_train), len(y_train))
-print(len(x_val), len(y_val))
-print(len(x_test), len(y_test))
-print("SP: ", len(sp_x_test))
-print("PA: ", len(pa_x_test))
-
 print('CREATE MODEL -----------------------------')
-
-# def se_block(input_tensor, ratio=16):
-#     channel_axis = -1  # TensorFlow channels_last format
-#     filters = input_tensor.shape[channel_axis]
-
-#     se = GlobalAveragePooling2D()(input_tensor)
-#     se = Reshape((1, 1, filters))(se)
-#     se = Dense(filters // ratio, activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
-#     se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
-#     x = multiply([input_tensor, se])
-#     return x
 
 base_model = EfficientNetV2L(include_top=False, input_shape=input_shape, weights='imagenet')
 
@@ -130,7 +95,6 @@ for i, layer in enumerate(base_model.layers):
 
 # Create a new model instance with the top layer
 x = base_model.output
-# x = se_block(x)  # Adding SE block after the base model output
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(1024, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
@@ -163,7 +127,7 @@ model.compile(
 )
 
 # Fit model (storing  weights) -------------------------------------------
-filepath="../../dataset/results/{}/{}/model.weights.h5".format(target_city, version)
+filepath="../../dataset/results/all_cities/{}/model.weights.h5".format(version)
 checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, 
                              monitor='val_accuracy', 
                              verbose=1, 
@@ -200,13 +164,13 @@ history = model.fit(x_train, y_train,
 
 model_json = model.to_json()
 
-with open("../../dataset/results/{}/{}/model.json".format(target_city, version), "w") as json_file:
+with open("../../dataset/results/all_cities/{}/model.json".format(version), "w") as json_file:
     json_file.write(simplejson.dumps(simplejson.loads(model_json), indent=4))
 
 
 ### evaluate model ---------------------------------------------------------
 
-weights_path = "../../dataset/results/{}/{}/model.weights.h5".format(target_city, version)
+weights_path = "../../dataset/results/all_cities/{}/model.weights.h5".format(version)
 model.load_weights(weights_path)
 
 score_sp = model.evaluate(sp_x_test, sp_y_test, verbose=1)
@@ -221,17 +185,3 @@ print('bh:', score_bh)
 print('br:', score_br) 
 print('ssa:', score_ssa) 
 print('pa:', score_pa)
-
-# sp: [0.40004023909568787, 0.9133333563804626, 411.0, 40.0, 410.0, 39.0, 0.911308228969574, 0.9133333563804626, 0.9607234597206116, 0.9547058939933777, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9162995, 0.9082774], dtype=float32)>]
-# rj: [0.45276638865470886, 0.8999999761581421, 405.0, 45.0, 405.0, 45.0, 0.8999999761581421, 0.8999999761581421, 0.9475902318954468, 0.938201904296875, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8955916 , 0.90405107], dtype=float32)>]
-# bh: [0.23802752792835236, 0.9155555367469788, 411.0, 38.0, 412.0, 39.0, 0.9153674840927124, 0.9133333563804626, 0.9755531549453735, 0.9735321998596191, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.9115646 , 0.91703045], dtype=float32)>]
-# br: [0.3697082996368408, 0.8999999761581421, 404.0, 45.0, 405.0, 46.0, 0.8997772932052612, 0.897777795791626, 0.9602074027061462, 0.9519544839859009, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.90280765, 0.8944953 ], dtype=float32)>]
-# ssa:[0.6606684923171997, 0.8577777743339539, 386.0, 62.0, 388.0, 64.0, 0.8616071343421936, 0.8577777743339539, 0.9109036922454834, 0.897025465965271, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8571428 , 0.86214435], dtype=float32)>]
-# pa: [0.7740493416786194, 0.7888888716697693, 351.0, 93.0, 357.0, 99.0, 0.7905405163764954, 0.7799999713897705, 0.8684889078140259, 0.8556915521621704, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.77777773, 0.7922078 ], dtype=float32)>]
-
-# sp: [0.34694671630859375, 0.8577777743339539, 386.0, 64.0, 386.0, 64.0, 0.8577777743339539, 0.8577777743339539, 0.9276740550994873, 0.9249191284179688, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.8571428, 0.858407 ], dtype=float32)>]
-# rj: [0.5083004832267761, 0.7866666913032532, 353.0, 93.0, 357.0, 97.0, 0.7914798259735107, 0.7844444513320923, 0.8487358689308167, 0.8329107761383057, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7748183, 0.7991718], dtype=float32)>]
-# bh: [0.48364174365997314, 0.753333330154419, 335.0, 110.0, 340.0, 115.0, 0.7528089880943298, 0.7444444298744202, 0.8503702878952026, 0.8515617847442627, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.7250608 , 0.76859504], dtype=float32)>]
-# br: [0.3495301306247711, 0.8622221946716309, 385.0, 62.0, 388.0, 65.0, 0.8612975478172302, 0.855555534362793, 0.9316346645355225, 0.9296150803565979, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.85585576, 0.86092716], dtype=float32)>]
-# ssa:[0.6282268166542053, 0.6800000071525574, 303.0, 142.0, 308.0, 147.0, 0.680898904800415, 0.6733333468437195, 0.7392666935920715, 0.7323459386825562, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.70225865, 0.6470587 ], dtype=float32)>]
-# pa: [0.6469298601150513, 0.7244444489479065, 324.0, 123.0, 327.0, 126.0, 0.7248322367668152, 0.7200000286102295, 0.7767060995101929, 0.7457766532897949, <tf.Tensor: shape=(2,), dtype=float32, numpy=array([0.71131635, 0.73275864], dtype=float32)>]
